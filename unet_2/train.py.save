@@ -1,0 +1,199 @@
+import torch
+import torch.optim as optim
+from torch.optim import lr_scheduler
+import time
+import copy
+from networks import UNet
+from torchsummary import summary
+import matplotlib.pyplot as plt
+from torchvision import transforms, utils
+from data import SegDataset
+import json
+from collections import defaultdict
+import torch.nn.functional as F
+from utils import dice_loss,load_train_test,calc_loss
+import numpy as np
+
+# def calc_loss(pred, target, metrics, bce_weight=0.5):
+#     bce = F.binary_cross_entropy_with_logits(pred, target)
+#
+#     pred = F.sigmoid(pred)
+#     dice = dice_loss(pred, target)
+#
+#     loss = bce * bce_weight + dice * (1 - bce_weight)
+#
+#     metrics['bce'] += bce.data.cpu().numpy() * target.size(0)
+#     metrics['dice'] += dice.data.cpu().numpy() * target.size(0)
+#     metrics['loss'] += loss.data.cpu().numpy() * target.size(0)
+#
+#     return loss
+#
+# def print_metrics(metrics, epoch_samples, phase):
+#     outputs = []
+#     for k in metrics.keys():
+#         outputs.append("{}: {:4f}".format(k, metrics[k] / epoch_samples))
+#
+#     print("{}: {}".format(phase, ", ".join(outputs)))
+
+# def train_model(model, optimizer, scheduler, num_epochs=25):
+#     best_model_wts = copy.deepcopy(model.state_dict())
+#     best_loss = 1e10
+#
+#     for epoch in range(num_epochs):
+#         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
+#         print('-' * 10)
+#
+#         since = time.time()
+#
+#         # Each epoch has a training and validation phase
+#         for phase in ['train', 'val']:
+#             if phase == 'train':
+#                 scheduler.step()
+#                 for param_group in optimizer.param_groups:
+#                     print("LR", param_group['lr'])
+#
+#                 model.train()  # Set model to training mode
+#             else:
+#                 model.eval()   # Set model to evaluate mode
+#
+#             metrics = defaultdict(float)
+#             epoch_samples = 0
+#
+#             for inputs, labels in dataloaders[phase]:
+#                 inputs = inputs.to(device)
+#                 labels = labels.to(device)
+#
+#                 # zero the parameter gradients
+#                 optimizer.zero_grad()
+#
+#                 # forward
+#                 # track history if only in train
+#                 with torch.set_grad_enabled(phase == 'train'):
+#                     outputs = model(inputs)
+#                     loss = calc_loss(outputs, labels, metrics)
+#
+#                     # backward + optimize only if in training phase
+#                     if phase == 'train':
+#                         loss.backward()
+#                         optimizer.step()
+#
+#                 # statistics
+#                 epoch_samples += inputs.size(0)
+#
+#             print_metrics(metrics, epoch_samples, phase)
+#             epoch_loss = metrics['loss'] / epoch_samples
+#
+#             # deep copy the model
+#             if phase == 'val' and epoch_loss < best_loss:
+#                 print("saving best model")
+#                 best_loss = epoch_loss
+#                 best_model_wts = copy.deepcopy(model.state_dict())
+#
+#         time_elapsed = time.time() - since
+#         print('{:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+#     print('Best val loss: {:4f}'.format(best_loss))
+#
+#     # load best model weights
+#     model.load_state_dict(best_model_wts)
+#     return model
+#
+#
+#
+
+num_class = 1
+num_epochs = 200
+
+#image_dirs = ["../Datasets_and_Masked/ICDAR_2013_Actual","../Datasets_and_Masked/ICDAR_2017_Actual","../Datasets_and_Masked/Marmot_Actual","../Datasets_and_Masked/UNLV_Actual","../Datasets_and_Masked/Train_Actual_Images"]
+#mask_dirs = ["../Datasets_and_Masked/ICDAR_2013_Masked","../Datasets_and_Masked/ICDAR_2017_Masked","../Datasets_and_Masked/Marmot_Masked","../Datasets_and_Masked/UNLV_Masked","../Datasets_and_Masked/Train_Masked_Images"]
+
+image_dirs = ["../../pixlabel/datasets/cityscapes/train_A"]
+mask_dirs = ["../../pixlabel/datasets/cityscapes/train_B"]
+
+train_transforms = transforms.Compose([
+    transforms.ToTensor()])
+
+data = SegDataset(image_dirs,mask_dir = mask_dirs,transform = train_transforms)
+print("THe size of the complete dataset is {}".format(data.__len__()))
+
+train_loader,test_loader = load_train_test(data,valid_size = 0.01)
+
+print("The size of training examples is : {}".format(len(train_loader.dataset)))
+print("The size of testing exapmles is : {}".format(len(test_loader.dataset)))
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(device)
+
+model = UNet(num_class).to(device)
+summary(model,(1,512,512))
+
+d = open('sample.json', 'w+')
+
+# Observe that all parameters are being optimized
+optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+# exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=25, gamma=0.1)
+
+# model = train_model(model, optimizer_ft, exp_lr_scheduler, num_epochs=40)
+# best_loss = 1e10
+for epoch in range(200):
+    metrics = defaultdict(float)
+    epoch_loss = 0
+    # train_loss = []
+    # val_loss = []
+    # epoch_train_loss = []
+    # epoch_val_loss = []
+    epoch_samples = 0
+    for batch_idx,batch in enumerate(train_loader):
+          model.train()
+          img = batch[0].to(device)
+          mask = batch[1].to(device)
+          print("Shapes", img.shape, mask.shape)
+          epoch_samples += img.size(0)
+          pred_mask = model(img)
+
+          loss = calc_loss(pred_mask,mask,metrics)
+          epoch_loss += loss.item()
+          optimizer.zero_grad()
+          loss.backward()
+          optimizer.step()
+          print("EPOCH:{0} || BATCH NO:{1} || LOSS:{2}".format(epoch,batch_idx,loss.item()))
+          if batch_idx%3000 == 0:
+              torch.save(model.state_dict(),"../outputs/checkpoints/ckpt_{}_{}.pth".format(batch_idx,epoch))
+              metrics["batch_idx"] = batch_idx
+              metrics["epoch"] = epoch
+              metrics["epoch_samples"] = epoch_samples
+              a = open("../outputs/train_logs/train_metrics_{}_{}.json".format(batch_idx,epoch), 'w+')
+              with open("../outputs/train_logs/train_metrics_{}_{}.json".format(batch_idx,epoch), 'w') as wrf:
+                  json.dump(metrics, wrf)
+              for idx in range(img.shape[0]):
+                  img_list = [img[idx],mask[idx],pred_mask[idx]]
+                  utils.save_image(img_list,"../outputs/image_outs/batch_out_{0}_{1}_{2}.png".format(epoch,batch_idx,idx))
+                  print("Images saved to Directory")
+          # print()
+    # epoch_train_loss.append(metrics["loss"]/len(train_loader.dataset))
+
+
+
+              print("Testing on Validation Set")
+              test_metrics = defaultdict(float)
+              for test_idx,test_batch in enumerate(test_loader):
+
+                  model.eval()
+                  test_img  = test_batch[0].to(device)
+                  test_mask = test_batch[1].to(device)
+
+                  pred_test = model(test_img)
+
+                  loss = calc_loss(pred_mask,mask,test_metrics)
+                  for idx in range(test_img.shape[0]):
+                       print("Save Shapes", img[idx].shape, mask[idx].shape, pred_mask[idx].shape)
+                       img_list = [img[idx],mask[idx],pred_mask[idx]]
+                       utils.save_image(img_list,"../outputs/image_outs/test_batch_out_{0}_{1}_{2}.png".format(epoch,test_idx,idx))
+                       print("Images saved to Test Directory")
+              test_metrics["test_samples"] = len(test_loader.dataset)
+              c = open("../outputs/train_logs/test_metrics_{}_{}.json".format(batch_idx,epoch),'w+')
+              with open("../outputs/train_logs/test_metrics_{}_{}.json".format(batch_idx,epoch),'w') as wrf1:
+                  json.dump(test_metrics, wrf1)
+    b = open("../outputs/train_logs/epoch_metrics_{}.json".format(epoch), 'w+')
+    with open("../outputs/train_logs/epoch_metrics_{}.json".format(epoch), 'w') as wrf2:
+        json.dump(metrics, wrf2)

@@ -1,0 +1,233 @@
+import cv2
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms, utils
+import numpy as np
+import os
+import PIL
+from PIL import Image
+import torch
+
+
+# class SegDataset(Dataset):
+#     def __init__(self,rootdir,mask_dir=None,weights_dir=None,transform=None,imageloader=cv2.imread,train = True):
+#         super(Dataset,self).__init__()
+#         rootdir.sort()
+#         mask_dir.sort()
+#         weights_dir.sort()
+#         self.root = rootdir
+#         self.masks = mask_dir
+#         self.files = []
+#         self.train = train
+#         self.weights = weights_dir
+#         if train:
+#             for path_1,path_2,path_3 in zip(rootdir,mask_dir,weights_dir):
+#                 paths = [path_1,path_2,path_3]
+#                 for imagefile in os.listdir(paths[0]):
+#                     num_file = os.path.splitext(imagefile)[0] + ".npy"
+#                     imagepath = os.path.join(paths[0],imagefile)
+#                     maskpath = os.path.join(paths[1],imagefile)
+#                     weightpath = os.path.join(paths[2],num_file)
+#
+#                     files = [imagepath,maskpath,weightpath]
+#                     self.files.append(files)
+#             self.files.sort(key = self.take_first)
+#             print(len(self.files))
+#         else:
+#           for imagefile in os.listdir(rootdir):
+#             imagepath = os.path.join(rootdir,imagefile)
+#             self.files.append(imagepath)
+#             self.files.sort()
+#
+#         self.transform = transform
+#         self.imageloader = imageloader
+#
+#     def __len__(self):
+#         return len(self.files)
+#
+#     def __getitem__(self,idx):
+#       if self.train:
+#         print(self.files[idx][0])
+#         print(self.files[idx][1])
+#         print(self.files[idx][2])
+#         image = self.imageloader(self.files[idx][0])
+#         mask = self.imageloader(self.files[idx][1])
+#         weight = np.load(self.files[idx][2])
+#         # image = cv2.cvtColor(image,)
+#         thresh,bit_mask = cv2.threshold(mask,100,255,cv2.THRESH_BINARY)
+#         # bit_mask = cv2.bitwise_not(bit_mask)
+#         #ret,gray_im = cv2.threshold(gray_im, 0, 255, cv2.THRESH_OTSU)
+#         # gray_im = gray_im/255.0
+#         pil_image = PIL.Image.fromarray(image).convert('L')
+#         pil_mask = PIL.Image.fromarray(bit_mask).convert('L')
+#         t_weights = torch.from_numpy(weight).float()
+#         t_weights = t_weights.unsqueeze(0)
+#         if self.transform:
+#             im = self.transform(pil_image)
+#             m = self.transform(pil_mask)
+#         print(im.shape)
+#         print(m.shape)
+#         print(t_weights.shape)
+#         return (im,m,t_weights)
+#       else:
+#         image = self.imageloader(self.files[idx])
+#         pil_image = PIL.Image.fromarray(image).convert('L')
+#         if self.transform:
+#           im = self.transform(pil_image)
+#         return im
+#
+#
+#     @staticmethod
+#     def take_first(elem):
+#       return elem[0]
+#
+# train_transforms = transforms.Compose([
+#     transforms.ToTensor()])
+
+# tdata = SegDataset(["/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked/ICDAR_2013_Actual_Augmented","/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked/ICDAR_2017_Actual_Augmented"],mask_dir = ["/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked/ICDAR_2013_Masked_Augmented","/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked/ICDAR_2017_Masked_Augmented"],weights_dir=["/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked/ICDAR_2013_Masked_Augmentedweights","/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked/ICDAR_2017_Masked_Augmentedweights"],transform = train_transforms)
+# im,m,t = tdata.__getitem__(35)
+# print(torch.unique(t))
+# print(tdata.__getitem__(35))
+
+class SegDataset(Dataset):
+    def __init__(self,rootdir,mask_dir=None,transform=None,imageloader=cv2.imread,train=True):
+        super(Dataset,self).__init__()
+        rootdir.sort()
+        mask_dir.sort()
+        self.root = rootdir
+        self.masks = mask_dir
+        self.files = []
+        self.train = train
+        print(self.root)
+        print(self.masks)
+        # self.main_path = "/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked"
+        if train:
+            for path1,path2 in zip(rootdir,mask_dir):
+                for imagefile in os.listdir(path1):
+                    imagepath = os.path.join(path1,imagefile)
+                    maskpath = os.path.join(path2,imagefile)
+                    files = [imagepath,maskpath]
+                    self.files.append(files)
+                    self.files.sort(key = self.take_first)
+                    # print(len(self.files))
+        else:
+          for path1,path2 in zip(rootdir,mask_dir):
+              for imagefile in os.listdir(path1):
+                  imagepath = os.path.join(path1,imagefile)
+                  self.files.append(imagepath)
+                  self.files.sort()
+
+        self.transform = transform
+        self.imageloader = imageloader
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self,idx):
+      if self.train:
+        image = self.imageloader(self.files[idx][0])
+        mask = self.imageloader(self.files[idx][1])
+        # image = cv2.cvtColor(image,)
+        image = cv2.resize(image, (512,512), interpolation=cv2.INTER_AREA)
+        print("IS", image.shape, mask.shape)
+
+        mask = cv2.resize(mask, (512,512), interpolation=cv2.INTER_AREA)
+        
+        #thresh,mask = cv2.threshold(mask,100,255,cv2.THRESH_BINARY)
+
+        #bit_mask = cv2.bitwise_not(bit_mask)
+        #ret,gray_im = cv2.threshold(gray_im, 0, 255, cv2.THRESH_OTSU)
+        #gray_im = gray_im/255.0
+        pil_image = PIL.Image.fromarray(image).convert('L')
+        #pil_mask = PIL.Image.fromarray(bit_mask).convert('L')
+        pil_mask = PIL.Image.fromarray(mask)
+        if self.transform:
+            im = self.transform(pil_image)
+            m = self.transform(pil_mask)
+        return (im,m)
+      else:
+        image = self.imageloader(self.files[idx])
+        #pil_image = PIL.Image.fromarray(image).convert('L')
+        pil_image = PIL.Image.fromarray(image)
+        if self.transform:
+          im = self.transform(pil_image)
+        return im
+
+
+    @staticmethod
+    def take_first(elem):
+      return elem[0]
+
+# train_transforms = transforms.Compose([transforms.ToTensor()])
+
+
+# root_dirs = ["ICDAR_2013_Actual_Augmented","ICDAR_2017_Actual_Augmented","Marmot_Actual_Augmented","UNLV_Actual_Augmented"]
+# mask_dirs = ["ICDAR_2013_Masked_Augmented","ICDAR_2017_Masked_Augmented","Marmot_Masked_Augmented","UNLV_Masked_Augmented"]
+#
+# train_data = SegDataset(root_dirs,mask_dir = mask_dirs,transform = train_transforms)
+
+
+class SegDataset1(Dataset):
+    def __init__(self,rootdir,mask_dir=None,transform=None,imageloader=cv2.imread,train = True):
+        super(Dataset,self).__init__()
+        rootdir.sort()
+        mask_dir.sort()
+        self.root = rootdir
+        self.masks = mask_dir
+        self.files = []
+        self.train = train
+        print(self.root)
+        print(self.masks)
+        # self.main_path = "/Users/vaishnav/Desktop/Dassrc/Datasets_and_Masked"
+        if train:
+            for path1,path2 in zip(rootdir,mask_dir):
+                for imagefile in os.listdir(path1):
+                    imagepath = os.path.join(path1,imagefile)
+                    maskpath = os.path.join(path2,imagefile)
+                    files = [imagepath,maskpath]
+                    self.files.append(files)
+                    self.files.sort(key = self.take_first)
+                    # print(len(self.files))
+        else:
+          for path1,path2 in zip(rootdir,mask_dir):
+              for imagefile in os.listdir(path1):
+                  imagepath = os.path.join(path1,imagefile)
+                  self.files.append(imagepath)
+                  self.files.sort()
+
+        self.transform = transform
+        self.imageloader = imageloader
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self,idx):
+      if self.train:
+        image = self.imageloader(self.files[idx][0])
+        mask = self.imageloader(self.files[idx][1])
+        # image = cv2.cvtColor(image,)
+        image = cv2.resize(image, (512,512), interpolation=cv2.INTER_AREA)
+#        print("IS", image.shape, mask.shape)
+        mask = cv2.resize(mask, (512,512), interpolation=cv2.INTER_AREA)
+#        print("MS", mask.shape)
+        thresh,bit_mask = cv2.threshold(mask,100,255,cv2.THRESH_BINARY)
+        #bit_mask = cv2.bitwise_not(bit_mask)
+        #ret,gray_im = cv2.threshold(gray_im, 0, 255, cv2.THRESH_OTSU)
+        #gray_im = gray_im/255.0
+        pil_image = PIL.Image.fromarray(image).convert('L')
+        #pil_mask = PIL.Image.fromarray(bit_mask).convert('L')
+        pil_mask = PIL.Image.fromarray(bit_mask)
+        if self.transform:
+            im = self.transform(pil_image)
+            m = self.transform(pil_mask)
+        return (im,m)
+      else:
+        image = self.imageloader(self.files[idx])
+        pil_image = PIL.Image.fromarray(image).convert('L')
+        #pil_image = PIL.Image.fromarray(image)
+        if self.transform:
+          im = self.transform(pil_image)
+        return im,self.files[idx]
+
+    @staticmethod
+    def take_first(elem):
+      return elem[0]
