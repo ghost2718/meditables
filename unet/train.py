@@ -33,6 +33,17 @@ num_epochs = 1200
 # mask_dirs = ["../MedTrain_Masked", "../MedVal_Masked"]
 
 
+parser = argparse.ArgumentParser(description='For Getting Training Arguments')
+parser.add_argument('--image_dir', type=str,
+                    help='Path to Training Images')
+parser.add_argument('--label_dir',type=str,help='Path to Training Labels')
+parser.add_argument('--batch_size',type=int,help='Size of training batch')
+parser.add_argument('--num_class',type=int,default=1,help='Num of classes in Training Data')
+parser.add_argument('--num_epoch',type=int,default=60,help='Number of epoch to Train the Model for')
+
+
+
+
 
 
 
