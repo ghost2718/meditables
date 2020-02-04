@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def Model_loss(nn.Module):
+class Model_loss(nn.Module):
     def __init__():
         super(Model_loss, self).__init__()
     def log_dice(pred,target):
@@ -20,5 +20,3 @@ def Model_loss(nn.Module):
             return log_dice(pred,target)
         else:
             return (F.cross_entropy(pred,target) + log_dice(pred_target))
-
-                
